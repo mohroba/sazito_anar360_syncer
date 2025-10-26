@@ -72,7 +72,7 @@ class SazitoClient
             $body['discount_price'] = $discountPrice;
         }
 
-        return $this->send('PUT', sprintf('/accounting/update-price/%s', $variantId), [
+        return $this->send('PUT', sprintf('accounting/update-price/%s', $variantId), [
             ...$options,
             'json' => $body,
         ]);

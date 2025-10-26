@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Actions\Sync\UpdateVariantPriceAction;
 use App\Actions\Sync\UpdateVariantStockAction;
+use App\Models\SyncRun;
 use App\Services\Sazito\Exceptions\SazitoRequestException;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
@@ -32,12 +33,12 @@ class TestUpdateSazitoProductCommand extends Command
 
     public function handle(): int
     {
-        $variantId = (string) $this->argument('variant');
-        $priceOption = $this->option('price');
-        $stockOption = $this->option('stock');
-        $discountOption = $this->option('discount');
+        $variantId         = (string) $this->argument('variant');
+        $priceOption       = $this->option('price');
+        $stockOption       = $this->option('stock');
+        $discountOption    = $this->option('discount');
         $hasRawPriceOption = $this->option('has-raw-price');
-        $isRelative = (bool) $this->option('relative');
+        $isRelative        = (bool) $this->option('relative');
 
         if ($priceOption === null && $stockOption === null) {
             $this->error('You must provide at least one of --price or --stock.');
@@ -45,47 +46,89 @@ class TestUpdateSazitoProductCommand extends Command
             return self::FAILURE;
         }
 
+        /** ----------------------------------------------------------------
+         *  1️⃣  Create a synthetic SyncRun row so FK constraints are happy
+         * -----------------------------------------------------------------*/
         $runId = (string) Str::ulid();
 
+        SyncRun::query()->create([
+            'id'         => $runId,
+            'started_at' => now(),
+            'status'     => 'running',
+            'scope'      => 'manual-test',
+            'page'       => 0,
+        ]);
+
+        /** ----------------------------------------------------------------
+         *  2️⃣  Perform price update (if requested)
+         * -----------------------------------------------------------------*/
         if ($priceOption !== null) {
-            $price = (int) $priceOption;
+            $price         = (int) $priceOption;
             $discountPrice = $discountOption !== null ? (int) $discountOption : null;
-            $hasRawPrice = $this->normalizeBooleanOption($hasRawPriceOption);
+            $hasRawPrice   = $this->normalizeBooleanOption($hasRawPriceOption);
 
             try {
-                $this->updateVariantPrice->execute($runId, $variantId, $price, $discountPrice, $hasRawPrice);
-                $this->info(sprintf('Price update request sent for %s.', $variantId));
-            } catch (SazitoRequestException $exception) {
-                $this->error(sprintf('Sazito rejected the price update: %s', $exception->getMessage()));
+                $this->updateVariantPrice->execute(
+                    runId:         $runId,
+                    variantId:     $variantId,
+                    price:         $price,
+                    discountPrice: $discountPrice,
+                    hasRawPrice:   $hasRawPrice,
+                );
+
+                $this->info(sprintf('✅  Price update request sent for variant %s.', $variantId));
+            } catch (SazitoRequestException $e) {
+                $this->error(sprintf('❌  Sazito rejected the price update: %s', $e->getMessage()));
+                $this->finalizeRun($runId, 'failed');
 
                 return self::FAILURE;
-            } catch (Throwable $exception) {
-                $this->error(sprintf('Unexpected price update failure: %s', $exception->getMessage()));
+            } catch (Throwable $e) {
+                $this->error(sprintf('❌  Unexpected price update failure: %s', $e->getMessage()));
+                $this->finalizeRun($runId, 'failed');
 
                 return self::FAILURE;
             }
         }
 
+        /** ----------------------------------------------------------------
+         *  3️⃣  Perform stock update (if requested)
+         * -----------------------------------------------------------------*/
         if ($stockOption !== null) {
             $stock = (int) $stockOption;
 
             try {
-                $this->updateVariantStock->execute($runId, $variantId, $stock, $isRelative);
-                $this->info(sprintf('Stock update request sent for %s.', $variantId));
-            } catch (SazitoRequestException $exception) {
-                $this->error(sprintf('Sazito rejected the stock update: %s', $exception->getMessage()));
+                $this->updateVariantStock->execute(
+                    runId:        $runId,
+                    variantId:    $variantId,
+                    stock:        $stock,
+                    isRelative:   $isRelative,
+                );
+
+                $this->info(sprintf('✅  Stock update request sent for variant %s.', $variantId));
+            } catch (SazitoRequestException $e) {
+                $this->error(sprintf('❌  Sazito rejected the stock update: %s', $e->getMessage()));
+                $this->finalizeRun($runId, 'failed');
 
                 return self::FAILURE;
-            } catch (Throwable $exception) {
-                $this->error(sprintf('Unexpected stock update failure: %s', $exception->getMessage()));
+            } catch (Throwable $e) {
+                $this->error(sprintf('❌  Unexpected stock update failure: %s', $e->getMessage()));
+                $this->finalizeRun($runId, 'failed');
 
                 return self::FAILURE;
             }
         }
 
+        /** ----------------------------------------------------------------
+         *  4️⃣  Mark the synthetic run as finished-success
+         * -----------------------------------------------------------------*/
+        $this->finalizeRun($runId, 'success');
+
         return self::SUCCESS;
     }
 
+    /**
+     * Convert CLI boolean-ish strings into actual bool/null
+     */
     private function normalizeBooleanOption(mixed $value): ?bool
     {
         if ($value === null || $value === '') {
@@ -96,12 +139,21 @@ class TestUpdateSazitoProductCommand extends Command
             return $value;
         }
 
-        $value = strtolower((string) $value);
-
-        return match ($value) {
-            '1', 'true', 'yes', 'on' => true,
+        return match (strtolower((string) $value)) {
+            '1', 'true', 'yes', 'on'  => true,
             '0', 'false', 'no', 'off' => false,
-            default => null,
+            default                   => null,
         };
+    }
+
+    /**
+     * Update the temporary SyncRun row’s final status.
+     */
+    private function finalizeRun(string $runId, string $status): void
+    {
+        SyncRun::query()->whereKey($runId)->update([
+            'finished_at' => now(),
+            'status'      => $status,
+        ]);
     }
 }
