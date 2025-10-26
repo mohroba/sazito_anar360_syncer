@@ -64,7 +64,7 @@ class Anar360Client
 
         Log::debug('[Anar360] Response received', [
             'status' => $response->getStatusCode(),
-            'body_snippet' => substr((string) $response->getBody(), 0, 500),
+            'body_snippet' => (string) $response->getBody(),
         ]);
 
         $rawPayload = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);

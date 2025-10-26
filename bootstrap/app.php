@@ -33,7 +33,7 @@ return tap(Application::configure(basePath: dirname(__DIR__))
         $schedule->command('sync:retry-failures')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
 
         $schedule->command('sync:sazito-products', [
-            '--limit' => 100,
+            '--limit' => 1000,
             '--all' => true,
         ])->hourly()->withoutOverlapping()->onOneServer();
     })

@@ -103,26 +103,6 @@ class SazitoClient
      *
      * @throws SazitoRequestException
      */
-    public function fetchProducts(?int $page = null, ?int $limit = null, array $options = []): array
-    {
-        $query = $options['query'] ?? [];
-        if ($page !== null) {
-            $query['page'] = $page;
-        }
-        if ($limit !== null) {
-            $query['limit'] = $limit;
-        }
-
-        $options['query'] = $query;
-
-        return $this->send('GET', '/products', $options);
-    }
-
-    /**
-     * @return array<string, mixed>
-     *
-     * @throws SazitoRequestException
-     */
     public function fetchProduct(string $productId, array $options = []): array
     {
         return $this->send('GET', sprintf('/products/%s', $productId), $options);
