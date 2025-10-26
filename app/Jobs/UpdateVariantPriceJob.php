@@ -36,6 +36,7 @@ class UpdateVariantPriceJob implements ShouldQueue
         private readonly string $runId,
         private readonly ?int $discountPrice = null,
         private readonly ?bool $hasRawPrice = null,
+        private readonly ?string $sourceVariantId = null,
     ) {
         $this->idempotencyKey = hash('sha256', implode(':', [
             'SAZITO',
@@ -69,6 +70,7 @@ class UpdateVariantPriceJob implements ShouldQueue
             $recordEvent->execute($this->runId, 'SKIPPED', [
                 'reason' => 'sazito-disabled',
                 'variant_id' => $this->variantId,
+                ...$this->sourceVariantContext(),
             ], $this->variantId, 'warning');
 
             return;
@@ -78,6 +80,7 @@ class UpdateVariantPriceJob implements ShouldQueue
             $recordEvent->execute($this->runId, 'SKIPPED', [
                 'reason' => 'idempotent-hit',
                 'variant_id' => $this->variantId,
+                ...$this->sourceVariantContext(),
             ], $this->variantId, 'info');
 
             return;
@@ -88,6 +91,7 @@ class UpdateVariantPriceJob implements ShouldQueue
             $recordEvent->execute($this->runId, 'SKIPPED', [
                 'reason' => 'circuit-open',
                 'variant_id' => $this->variantId,
+                ...$this->sourceVariantContext(),
             ], $this->variantId, 'warning');
 
             $this->release(30);
@@ -100,6 +104,7 @@ class UpdateVariantPriceJob implements ShouldQueue
         if (RateLimiter::tooManyAttempts($rateKey, $rateLimit)) {
             $recordEvent->execute($this->runId, 'RATE_LIMITED', [
                 'variant_id' => $this->variantId,
+                ...$this->sourceVariantContext(),
             ], $this->variantId, 'warning');
             $this->release(10);
 
@@ -109,9 +114,17 @@ class UpdateVariantPriceJob implements ShouldQueue
         RateLimiter::hit($rateKey, 60);
 
         try {
-            $action->execute($this->runId, $this->variantId, $this->price, $this->discountPrice, $this->hasRawPrice, options: [
-                'idempotency_key' => $this->idempotencyKey,
-            ]);
+            $action->execute(
+                runId: $this->runId,
+                variantId: $this->variantId,
+                price: $this->price,
+                discountPrice: $this->discountPrice,
+                hasRawPrice: $this->hasRawPrice,
+                sourceVariantId: $this->sourceVariantId,
+                options: [
+                    'idempotency_key' => $this->idempotencyKey,
+                ],
+            );
             $circuitBreaker->recordSuccess($circuitKey);
         } catch (SazitoRequestException $exception) {
             $circuitBreaker->recordFailure($circuitKey);
@@ -128,6 +141,7 @@ class UpdateVariantPriceJob implements ShouldQueue
                     'status' => $exception->statusCode(),
                     'discount_price' => $this->discountPrice,
                     'has_raw_price' => $this->hasRawPrice,
+                    ...$this->sourceVariantContext(),
                 ], static fn ($value) => $value !== null), $this->variantId, 'error');
 
                 return;
@@ -171,10 +185,22 @@ class UpdateVariantPriceJob implements ShouldQueue
             $payload['has_raw_price'] = $this->hasRawPrice;
         }
 
+        if ($this->sourceVariantId !== null) {
+            $payload['source_variant_id'] = $this->sourceVariantId;
+        }
+
         $failure->payload = $payload;
         $failure->last_error = $message;
         $failure->attempts = ($failure->attempts ?? 0) + 1;
         $failure->next_retry_at = now()->addMinutes(5);
         $failure->save();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function sourceVariantContext(): array
+    {
+        return $this->sourceVariantId !== null ? ['source_variant_id' => $this->sourceVariantId] : [];
     }
 }

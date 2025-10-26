@@ -15,7 +15,14 @@ class UpdateVariantStockAction
         private readonly RecordEventAction $recordEvent,
     ) {}
 
-    public function execute(string $runId, string $variantId, int $stock, bool $isRelative = false, array $options = []): array
+    public function execute(
+        string $runId,
+        string $variantId,
+        int $stock,
+        bool $isRelative = false,
+        ?string $sourceVariantId = null,
+        array $options = [],
+    ): array
     {
         try {
             $response = $this->client->putStock($variantId, $stock, $isRelative, [
@@ -23,30 +30,48 @@ class UpdateVariantStockAction
                 'run_id' => $runId,
             ]);
         } catch (SazitoRequestException $exception) {
-            $this->recordEvent->execute($runId, 'VARIANT_STOCK_UPDATED', [
+            $payload = [
                 'variant_id' => $variantId,
                 'stock' => $stock,
                 'is_relative' => $isRelative,
                 'status' => $exception->statusCode(),
                 'response' => $exception->responseBody(),
-            ], $variantId, 'error');
+            ];
+
+            if ($sourceVariantId !== null) {
+                $payload['source_variant_id'] = $sourceVariantId;
+            }
+
+            $this->recordEvent->execute($runId, 'VARIANT_STOCK_UPDATED', $payload, $variantId, 'error');
 
             throw $exception;
         } catch (Throwable $exception) {
-            $this->recordEvent->execute($runId, 'VARIANT_STOCK_UPDATED', [
+            $payload = [
                 'variant_id' => $variantId,
                 'stock' => $stock,
                 'error' => $exception->getMessage(),
-            ], $variantId, 'error');
+            ];
+
+            if ($sourceVariantId !== null) {
+                $payload['source_variant_id'] = $sourceVariantId;
+            }
+
+            $this->recordEvent->execute($runId, 'VARIANT_STOCK_UPDATED', $payload, $variantId, 'error');
 
             throw $exception;
         }
 
-        $this->recordEvent->execute($runId, 'VARIANT_STOCK_UPDATED', [
+        $payload = [
             'variant_id' => $variantId,
             'stock' => $stock,
             'is_relative' => $isRelative,
-        ], $variantId);
+        ];
+
+        if ($sourceVariantId !== null) {
+            $payload['source_variant_id'] = $sourceVariantId;
+        }
+
+        $this->recordEvent->execute($runId, 'VARIANT_STOCK_UPDATED', $payload, $variantId);
 
         return $response;
     }
