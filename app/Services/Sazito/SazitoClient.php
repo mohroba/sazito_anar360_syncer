@@ -72,7 +72,10 @@ class SazitoClient
             $body['discount_price'] = $discountPrice;
         }
 
-        return $this->send('PUT', sprintf('/accounting/update-price/%s', $variantId), $body, $options);
+        return $this->send('PUT', sprintf('/accounting/update-price/%s', $variantId), [
+            ...$options,
+            'json' => $body,
+        ]);
     }
 
     /**
@@ -89,22 +92,51 @@ class SazitoClient
             $body['is_relative'] = true;
         }
 
-        return $this->send('PUT', sprintf('/accounting/update-stock/%s', $variantId), $body, $options);
+        return $this->send('PUT', sprintf('/accounting/update-stock/%s', $variantId), [
+            ...$options,
+            'json' => $body,
+        ]);
     }
 
     /**
-     * @param array<string, mixed> $body
+     * @return array<string, mixed>
+     *
+     * @throws SazitoRequestException
+     */
+    public function fetchProducts(?int $page = null, ?int $limit = null, array $options = []): array
+    {
+        $query = $options['query'] ?? [];
+        if ($page !== null) {
+            $query['page'] = $page;
+        }
+        if ($limit !== null) {
+            $query['limit'] = $limit;
+        }
+
+        $options['query'] = $query;
+
+        return $this->send('GET', '/products', $options);
+    }
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws SazitoRequestException
+     */
+    public function fetchProduct(string $productId, array $options = []): array
+    {
+        return $this->send('GET', sprintf('/products/%s', $productId), $options);
+    }
+
+    /**
      * @param array<string, mixed> $options
      *
      * @throws SazitoRequestException
      */
-    private function send(string $method, string $uri, array $body, array $options): array
+    private function send(string $method, string $uri, array $options): array
     {
         try {
-            $response = $this->client->request($method, $uri, [
-                'json' => $body,
-                ...$options,
-            ]);
+            $response = $this->client->request($method, $uri, $options);
         } catch (GuzzleException $exception) {
             throw new SazitoRequestException(0, null, $exception->getMessage(), $exception);
         }
