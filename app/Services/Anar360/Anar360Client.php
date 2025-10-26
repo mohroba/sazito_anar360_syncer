@@ -9,6 +9,7 @@ use Domain\DTO\ProductDTO;
 use Domain\DTO\VariantDTO;
 use Illuminate\Contracts\Validation\Factory as ValidatorFactory;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 
 class Anar360Client
 {
@@ -33,13 +34,37 @@ class Anar360Client
             ],
         );
 
-        $response = $client->request('GET', '/products', [
+        Log::debug('[Anar360] Sending GET request', [
+            'base_uri' => $this->config['base_uri'],
+            'endpoint' => '/products',
+            'full_url' => rtrim($this->config['base_uri'], '/') . '/products?' . http_build_query([
+                    'page' => $page,
+                    'limit' => $limit,
+                    'since' => $sinceMs,
+                ]),
+            'headers' => [
+                'Authorization' => 'Bearer ' . substr($this->config['token'], 0, 15) . '...', // mask token
+            ],
             'query' => [
                 'page' => $page,
                 'limit' => $limit,
                 'since' => $sinceMs,
             ],
             'run_id' => $runId,
+        ]);
+
+        $response = $client->request('GET', 'products', [
+            'query' => [
+                'page' => $page,
+                'limit' => $limit,
+                'since' => $sinceMs,
+            ],
+            'run_id' => $runId,
+        ]);
+
+        Log::debug('[Anar360] Response received', [
+            'status' => $response->getStatusCode(),
+            'body_snippet' => substr((string) $response->getBody(), 0, 500),
         ]);
 
         $rawPayload = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);

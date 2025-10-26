@@ -10,6 +10,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
+use Illuminate\Support\Facades\Log;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Throwable;
@@ -80,17 +81,34 @@ class HttpClientFactory
         $config = [
             'base_uri' => $baseUri,
             'timeout' => $this->timeout,
-            'http_errors' => false,
-            'allow_redirects' => false,
+            'http_errors' => true,
+            'allow_redirects' => true,
             'handler' => $stack,
         ];
-
         if ($defaultHeaders !== []) {
             $config['headers'] = $defaultHeaders;
         }
 
         return $this->clients[$driver] = new Client($config);
     }
+
+    /**
+     * Ensure a string is valid UTF-8 for safe JSON encoding.
+     */
+    private function ensureUtf8(string $value): string
+    {
+        // Try conversion; invalid bytes become ?
+        $converted = @mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+
+        // If conversion fails completely, base64 encode as fallback
+        if ($converted === false) {
+            return base64_encode($value);
+        }
+
+        // Replace any residual invalid sequences
+        return preg_replace('/[^\x00-\x7F\xC2-\xF4][\x80-\xBF]*/', '?', $converted) ?? $converted;
+    }
+
 
     private function recordAttempt(
         string $driver,
@@ -109,14 +127,15 @@ class HttpClientFactory
         }
         $reqBodyString = (string) $request->getBody();
         if ($reqBodyString !== '') {
-            $reqBody = ['raw' => $this->truncate($this->sanitizeBody($reqBodyString))];
+            $reqBody = ['raw' => $this->ensureUtf8($this->truncate($this->sanitizeBody($reqBodyString)))];
         }
+
 
         $respBody = null;
         $status = null;
         if ($response !== null) {
             $status = $response->getStatusCode();
-            $respBody = $this->truncate($this->sanitizeBody((string) $response->getBody()));
+            $respBody = $this->ensureUtf8($this->truncate($this->sanitizeBody((string) $response->getBody())));
         }
 
         $outcome = 'success';
@@ -177,6 +196,7 @@ class HttpClientFactory
             return $trimmed;
         }
 
+        // Try to decode JSON — safest way to inspect body content
         $decoded = json_decode($trimmed, true);
         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
             $sanitized = $this->maskSensitiveValues($decoded);
@@ -185,11 +205,19 @@ class HttpClientFactory
             return $encoded !== false ? $encoded : $trimmed;
         }
 
-        return preg_replace(
-            '/("?(?:transfereeMobile|transFereeMobile|mobile|phone)"?\s*:\s*")([^"\\]*)("?)/i',
-            '$1***$3',
-            $trimmed
-        ) ?? $trimmed;
+        // Non-JSON case (e.g. plain text, HTML, XML)
+        // Safely try to mask phone numbers using regex, but catch malformed input
+        try {
+            return preg_replace(
+                '/("?(?:transfereeMobile|transFereeMobile|mobile|phone)"?\s*:\s*")([^"\\]*)("?)/i',
+                '$1***$3',
+                $trimmed
+            ) ?? $trimmed;
+        } catch (\Throwable $e) {
+            // If regex parsing fails (e.g., invalid UTF-8 or unmatched brackets),
+            // just return the original body instead of throwing.
+            return $trimmed;
+        }
     }
 
     /**
