@@ -3,6 +3,8 @@
 use App\Console\Commands\RetryFailuresCommand;
 use App\Console\Commands\SyncHealthCommand;
 use App\Console\Commands\SyncProductsCommand;
+use App\Console\Commands\TestProductsCommand;
+use App\Console\Commands\TestUpdateSazitoProductCommand;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -13,6 +15,8 @@ return tap(Application::configure(basePath: dirname(__DIR__))
         SyncProductsCommand::class,
         RetryFailuresCommand::class,
         SyncHealthCommand::class,
+        TestProductsCommand::class,
+        TestUpdateSazitoProductCommand::class,
     ])
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
