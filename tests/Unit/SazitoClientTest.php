@@ -166,4 +166,75 @@ class SazitoClientTest extends TestCase
             'is_relative' => true,
         ], $body);
     }
+
+    public function test_fetch_products_adds_query_parameters(): void
+    {
+        $container = [];
+        $history = Middleware::history($container);
+        $mockHandler = new MockHandler([
+            new Response(200, ['Content-Type' => 'application/json'], json_encode(['data' => []], JSON_THROW_ON_ERROR)),
+        ]);
+
+        $stack = HandlerStack::create($mockHandler);
+        $stack->push($history);
+
+        $client = new Client([
+            'handler' => $stack,
+            'http_errors' => false,
+        ]);
+
+        $factory = Mockery::mock(HttpClientFactory::class);
+        $factory->shouldReceive('make')
+            ->once()
+            ->with('https://sazito.test', 'SAZITO', Mockery::type('array'))
+            ->andReturn($client);
+
+        $service = new SazitoClient($factory, [
+            'base_uri' => 'https://sazito.test',
+            'api_key' => 'secret',
+        ]);
+
+        $service->fetchProducts(2, 15);
+
+        $this->assertCount(1, $container);
+        $request = $container[0]['request'];
+        $this->assertSame('GET', $request->getMethod());
+        $this->assertStringContainsString('page=2', (string) $request->getUri());
+        $this->assertStringContainsString('limit=15', (string) $request->getUri());
+    }
+
+    public function test_fetch_product_hits_expected_endpoint(): void
+    {
+        $container = [];
+        $history = Middleware::history($container);
+        $mockHandler = new MockHandler([
+            new Response(200, ['Content-Type' => 'application/json'], json_encode(['id' => 'product-1'], JSON_THROW_ON_ERROR)),
+        ]);
+
+        $stack = HandlerStack::create($mockHandler);
+        $stack->push($history);
+
+        $client = new Client([
+            'handler' => $stack,
+            'http_errors' => false,
+        ]);
+
+        $factory = Mockery::mock(HttpClientFactory::class);
+        $factory->shouldReceive('make')
+            ->once()
+            ->with('https://sazito.test', 'SAZITO', Mockery::type('array'))
+            ->andReturn($client);
+
+        $service = new SazitoClient($factory, [
+            'base_uri' => 'https://sazito.test',
+            'api_key' => 'secret',
+        ]);
+
+        $service->fetchProduct('product-1');
+
+        $this->assertCount(1, $container);
+        $request = $container[0]['request'];
+        $this->assertSame('GET', $request->getMethod());
+        $this->assertSame('/products/product-1', $request->getUri()->getPath());
+    }
 }
