@@ -15,6 +15,7 @@ return [
         'base_uri' => env('SAZITO_BASE', 'https://nadinmed.ir/api/v1'),
         'api_key' => env('SAZITO_KEY', 'y%s&2a6n4k'),
         'rate_limit_per_minute' => (int) env('RATE_LIMIT_PER_MIN', 240),
+        'page_size' => (int) env('SAZITO_PAGE_SIZE', 100),
     ],
     'http' => [
         'timeout' => (int) env('HTTP_TIMEOUT', 15),

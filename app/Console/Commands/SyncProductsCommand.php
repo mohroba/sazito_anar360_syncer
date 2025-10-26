@@ -9,7 +9,11 @@ use App\Actions\Sync\RecordEventAction;
 use App\Actions\Sync\UpsertCursorAction;
 use App\Jobs\UpdateVariantPriceJob;
 use App\Jobs\UpdateVariantStockJob;
+use App\Models\SazitoProduct;
+use App\Models\SazitoVariant;
 use App\Models\SyncRun;
+use App\Support\TitleNormalizer;
+use Domain\DTO\ProductDTO;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Support\Str;
@@ -58,9 +62,34 @@ class SyncProductsCommand extends Command
 
             $jobsDispatched = 0;
             foreach ($result['products'] as $product) {
+                $sazitoProduct = $this->ensureSazitoProductMapping($product, $run);
+
                 foreach ($product->variants as $variant) {
-                    $this->dispatcher->dispatch(new UpdateVariantPriceJob($variant->id, $variant->price, $run->id));
-                    $this->dispatcher->dispatch(new UpdateVariantStockJob($variant->id, $variant->stock, false, $run->id));
+                    $mapping = SazitoVariant::query()->where('anar360_variant_id', $variant->id)->first();
+
+                    if ($mapping === null) {
+                        $this->recordEvent->execute($run->id, 'SKIPPED', [
+                            'reason' => 'mapping-missing',
+                            'variant_id' => $variant->id,
+                            'product_id' => $product->id,
+                        ], $variant->id, 'warning');
+
+                        continue;
+                    }
+
+                    $this->dispatcher->dispatch(new UpdateVariantPriceJob(
+                        $mapping->sazito_id,
+                        $variant->price,
+                        $run->id,
+                        sourceVariantId: $variant->id,
+                    ));
+                    $this->dispatcher->dispatch(new UpdateVariantStockJob(
+                        $mapping->sazito_id,
+                        $variant->stock,
+                        false,
+                        $run->id,
+                        sourceVariantId: $variant->id,
+                    ));
                     $jobsDispatched += 2;
                 }
             }
@@ -99,5 +128,34 @@ class SyncProductsCommand extends Command
         $this->info('Sync completed');
 
         return self::SUCCESS;
+    }
+
+    private function ensureSazitoProductMapping(ProductDTO $product, SyncRun $run): ?SazitoProduct
+    {
+        $existing = SazitoProduct::query()->where('anar360_product_id', $product->id)->first();
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        $normalizedTitle = TitleNormalizer::normalize($product->title);
+        if ($normalizedTitle === null) {
+            return null;
+        }
+
+        $candidate = SazitoProduct::query()
+            ->where('title_normalized', $normalizedTitle)
+            ->orderByDesc('synced_at')
+            ->first();
+
+        if ($candidate === null) {
+            return null;
+        }
+
+        if ($candidate->anar360_product_id !== $product->id) {
+            $candidate->anar360_product_id = $product->id;
+            $candidate->save();
+        }
+
+        return $candidate;
     }
 }

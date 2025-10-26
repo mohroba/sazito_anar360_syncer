@@ -21,6 +21,7 @@ class UpdateVariantPriceAction
         int $price,
         ?int $discountPrice = null,
         ?bool $hasRawPrice = null,
+        ?string $sourceVariantId = null,
         array $options = [],
     ): array
     {
@@ -35,6 +36,7 @@ class UpdateVariantPriceAction
                 $price,
                 $discountPrice,
                 $hasRawPrice,
+                $sourceVariantId,
                 [
                     'status' => $exception->statusCode(),
                     'response' => $exception->responseBody(),
@@ -48,6 +50,7 @@ class UpdateVariantPriceAction
                 $price,
                 $discountPrice,
                 $hasRawPrice,
+                $sourceVariantId,
                 ['error' => $exception->getMessage()],
             ), $variantId, 'error');
 
@@ -59,6 +62,7 @@ class UpdateVariantPriceAction
             $price,
             $discountPrice,
             $hasRawPrice,
+            $sourceVariantId,
         ), $variantId);
 
         return $response;
@@ -73,6 +77,7 @@ class UpdateVariantPriceAction
         int $price,
         ?int $discountPrice,
         ?bool $hasRawPrice,
+        ?string $sourceVariantId,
         array $extra = [],
     ): array {
         $payload = [
@@ -87,6 +92,10 @@ class UpdateVariantPriceAction
 
         if ($hasRawPrice !== null) {
             $payload['has_raw_price'] = $hasRawPrice;
+        }
+
+        if ($sourceVariantId !== null) {
+            $payload['source_variant_id'] = $sourceVariantId;
         }
 
         return $payload;

@@ -35,6 +35,7 @@ class UpdateVariantStockJob implements ShouldQueue
         private readonly int $stock,
         private readonly bool $isRelative,
         private readonly string $runId,
+        private readonly ?string $sourceVariantId = null,
     ) {
         $this->idempotencyKey = hash('sha256', sprintf('SAZITO:stock:%s:%d:%d', $variantId, $stock, $isRelative ? 1 : 0));
     }
@@ -61,6 +62,7 @@ class UpdateVariantStockJob implements ShouldQueue
             $recordEvent->execute($this->runId, 'SKIPPED', [
                 'reason' => 'sazito-disabled',
                 'variant_id' => $this->variantId,
+                ...$this->sourceVariantContext(),
             ], $this->variantId, 'warning');
 
             return;
@@ -70,6 +72,7 @@ class UpdateVariantStockJob implements ShouldQueue
             $recordEvent->execute($this->runId, 'SKIPPED', [
                 'reason' => 'idempotent-hit',
                 'variant_id' => $this->variantId,
+                ...$this->sourceVariantContext(),
             ], $this->variantId, 'info');
 
             return;
@@ -80,6 +83,7 @@ class UpdateVariantStockJob implements ShouldQueue
             $recordEvent->execute($this->runId, 'SKIPPED', [
                 'reason' => 'circuit-open',
                 'variant_id' => $this->variantId,
+                ...$this->sourceVariantContext(),
             ], $this->variantId, 'warning');
             $this->release(30);
 
@@ -91,6 +95,7 @@ class UpdateVariantStockJob implements ShouldQueue
         if (RateLimiter::tooManyAttempts($rateKey, $rateLimit)) {
             $recordEvent->execute($this->runId, 'RATE_LIMITED', [
                 'variant_id' => $this->variantId,
+                ...$this->sourceVariantContext(),
             ], $this->variantId, 'warning');
             $this->release(10);
 
@@ -100,9 +105,16 @@ class UpdateVariantStockJob implements ShouldQueue
         RateLimiter::hit($rateKey, 60);
 
         try {
-            $action->execute($this->runId, $this->variantId, $this->stock, $this->isRelative, options: [
-                'idempotency_key' => $this->idempotencyKey,
-            ]);
+            $action->execute(
+                runId: $this->runId,
+                variantId: $this->variantId,
+                stock: $this->stock,
+                isRelative: $this->isRelative,
+                sourceVariantId: $this->sourceVariantId,
+                options: [
+                    'idempotency_key' => $this->idempotencyKey,
+                ],
+            );
             $circuitBreaker->recordSuccess($circuitKey);
         } catch (SazitoRequestException $exception) {
             $circuitBreaker->recordFailure($circuitKey);
@@ -118,6 +130,7 @@ class UpdateVariantStockJob implements ShouldQueue
                     'stock' => $this->stock,
                     'is_relative' => $this->isRelative,
                     'status' => $exception->statusCode(),
+                    ...$this->sourceVariantContext(),
                 ], $this->variantId, 'error');
 
                 return;
@@ -150,11 +163,20 @@ class UpdateVariantStockJob implements ShouldQueue
             'stock' => $this->stock,
             'is_relative' => $this->isRelative,
             'run_id' => $this->runId,
+            ...$this->sourceVariantContext(),
             ...$extraPayload,
         ];
         $failure->last_error = $message;
         $failure->attempts = ($failure->attempts ?? 0) + 1;
         $failure->next_retry_at = now()->addMinutes(5);
         $failure->save();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function sourceVariantContext(): array
+    {
+        return $this->sourceVariantId !== null ? ['source_variant_id' => $this->sourceVariantId] : [];
     }
 }
