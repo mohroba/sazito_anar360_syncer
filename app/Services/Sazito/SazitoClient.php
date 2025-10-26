@@ -46,7 +46,7 @@ class SazitoClient
         }
 
         try {
-            $response = $this->client->request('GET', '/products', [
+            $response = $this->client->request('GET', 'products', [
                 'query' => $query,
                 'run_id' => $runId,
             ]);
