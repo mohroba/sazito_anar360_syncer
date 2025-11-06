@@ -1,0 +1,747 @@
+{
+  "base_url_hint": "Use your store domain as the base, e.g., https://www.example.com",
+  "auth": {
+    "public_endpoints": [
+      "GET /api/v1/products"
+    ],
+    "protected_header": "X-API-KEY: <your-token>",
+    "order_creation_header": "Access-Key: <your-token>",
+    "notes": [
+      "GET /api/v1/products is public and does not require a token.",
+      "For listing/updating orders and updating/creating products, include X-API-KEY.",
+      "For POST /api/v1/orders/create_order, examples show Access-Key header."
+    ]
+  },
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/products",
+      "auth_required": false,
+      "headers": {},
+      "description": "List products (public). Response includes product details and variants.",
+      "request_schema": null,
+      "sources": [
+        "turn1file12",
+        "turn1file13",
+        "turn1file14"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/orders",
+      "auth_required": true,
+      "headers": {
+        "X-API-KEY": "your-token"
+      },
+      "description": "List orders.",
+      "request_schema": null,
+      "sources": [
+        "turn1file13",
+        "turn1file6",
+        "turn1file14"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/orders/{order_id}",
+      "auth_required": true,
+      "headers": {
+        "X-API-KEY": "your-token"
+      },
+      "description": "Update an order by numeric id in path.",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "order_identifier": {
+            "type": "string",
+            "description": "Unique order identifier string."
+          },
+          "add_note_to_pdf": {
+            "type": "boolean"
+          },
+          "shippingItems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "status"
+              ]
+            }
+          }
+        },
+        "required": [
+          "order_identifier"
+        ]
+      },
+      "sources": [
+        "turn1file13",
+        "turn1file6"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/orders/create_order",
+      "auth_required": true,
+      "headers": {
+        "Access-Key": "your-token"
+      },
+      "description": "Create a new order.",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sku": {
+                  "type": "string",
+                  "description": "SKU of the variant/product."
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "price": {
+                  "type": "number",
+                  "description": "Final price after discounts."
+                },
+                "rawPrice": {
+                  "type": "number",
+                  "description": "Original price before discounts.",
+                  "nullable": true
+                }
+              },
+              "required": [
+                "sku",
+                "count",
+                "price"
+              ]
+            }
+          },
+          "shipping_address": {
+            "type": "object",
+            "properties": {
+              "phone_number": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "address": {
+                "type": "string"
+              },
+              "location": {
+                "type": "string"
+              },
+              "postal_code": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              },
+              "region": {
+                "type": "string"
+              },
+              "first_name": {
+                "type": "string"
+              },
+              "last_name": {
+                "type": "string"
+              },
+              "longitude": {
+                "type": "number"
+              },
+              "latitude": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "phone_number",
+              "email",
+              "address",
+              "postal_code",
+              "city",
+              "region",
+              "first_name",
+              "last_name"
+            ]
+          },
+          "third_party_name": {
+            "type": "string"
+          },
+          "shipping_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "skus": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "name": {
+                  "type": "string"
+                },
+                "cost": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "skus",
+                "name",
+                "cost"
+              ]
+            }
+          },
+          "discount": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "percentage",
+                  "fixed"
+                ]
+              },
+              "amount": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "code",
+              "type",
+              "amount"
+            ]
+          },
+          "payment": {
+            "type": "object",
+            "properties": {
+              "gateway_name": {
+                "type": "string",
+                "description": "e.g., zarinpal"
+              },
+              "amount": {
+                "type": "number"
+              },
+              "ref_number": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "gateway_name",
+              "amount",
+              "ref_number"
+            ]
+          },
+          "update_inventories": {
+            "type": "boolean",
+            "description": "If true, inventory will be decremented after order creation."
+          },
+          "note": {
+            "type": "string"
+          },
+          "vat_total": {
+            "type": "number",
+            "description": "VAT amount for the order."
+          }
+        },
+        "required": [
+          "items",
+          "shipping_address",
+          "shipping_items",
+          "payment"
+        ]
+      },
+      "sources": [
+        "turn1file1",
+        "turn1file10",
+        "turn1file11",
+        "turn1file16",
+        "turn1file17"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/products",
+      "auth_required": true,
+      "headers": {
+        "X-API-KEY": "your-token"
+      },
+      "description": "Create a new product with attributes and variants.",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "product": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "default": true
+              },
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "product_type": {
+                "type": "string",
+                "enum": [
+                  "simple",
+                  "digital",
+                  "service"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "product_type"
+            ]
+          },
+          "attributes": {
+            "type": "array",
+            "description": "List of product attributes; at least one differentiator required if variants exist.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "attribute_type": {
+                  "type": "string",
+                  "enum": [
+                    "differentiator",
+                    "plain"
+                  ]
+                }
+              },
+              "required": [
+                "type",
+                "name",
+                "attribute_type"
+              ]
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "product_variants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "image_id": {
+                  "type": "integer"
+                },
+                "price": {
+                  "type": "number"
+                },
+                "sku": {
+                  "type": "string",
+                  "description": "If omitted, system may auto-generate."
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "has_max_order": {
+                  "type": "boolean"
+                },
+                "min_order_count": {
+                  "type": "integer"
+                },
+                "is_stock_managed": {
+                  "type": "boolean"
+                },
+                "stock_number": {
+                  "type": "integer"
+                },
+                "weight": {
+                  "type": "number"
+                },
+                "attributes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": [
+                          "string",
+                          "object"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "value"
+                    ]
+                  }
+                },
+                "raw_price": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "sort_index": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "price",
+                "is_stock_managed",
+                "stock_number",
+                "attributes"
+              ]
+            }
+          }
+        },
+        "required": [
+          "product",
+          "product_variants"
+        ]
+      },
+      "sources": [
+        "turn1file15",
+        "turn1file7"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/products/{product_id}",
+      "auth_required": true,
+      "headers": {
+        "X-API-KEY": "your-token"
+      },
+      "description": "Update a product and its variants.",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "product": {
+            "$ref": "#/endpoints/POST /api/v1/products/request_schema/properties/product"
+          },
+          "attributes": {
+            "$ref": "#/endpoints/POST /api/v1/products/request_schema/properties/attributes"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "product_category_ids": {
+            "type": [
+              "array",
+              "string"
+            ]
+          },
+          "product_variants": {
+            "type": "array",
+            "description": "Must include the variant id to update existing ones.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "image_id": {
+                  "type": "integer"
+                },
+                "price": {
+                  "type": "number"
+                },
+                "sku": {
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "has_max_order": {
+                  "type": "boolean"
+                },
+                "min_order_count": {
+                  "type": "integer"
+                },
+                "is_stock_managed": {
+                  "type": "boolean"
+                },
+                "stock_number": {
+                  "type": "integer"
+                },
+                "weight": {
+                  "type": "number"
+                },
+                "attributes": {
+                  "type": "array"
+                },
+                "raw_price": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "sort_index": {
+                  "type": "integer"
+                },
+                "commercial_files": {
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          }
+        },
+        "required": [
+          "product"
+        ]
+      },
+      "sources": [
+        "turn1file9",
+        "turn1file3"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/accounting/update-price/{variant_id}",
+      "auth_required": true,
+      "headers": {
+        "X-API-KEY": "your-token"
+      },
+      "description": "Update price of a single variant.",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "price": {
+            "type": "number"
+          },
+          "has_raw_price": {
+            "type": "boolean"
+          },
+          "discount_price": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "price"
+        ]
+      },
+      "sources": [
+        "turn1file2",
+        "turn1file3"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/accounting/update-stock/{variant_id}",
+      "auth_required": true,
+      "headers": {
+        "X-API-KEY": "your-token"
+      },
+      "description": "Update stock of a single variant.",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "is_stock_manager": {
+            "type": "boolean",
+            "description": "If false, inventory is unlimited."
+          },
+          "stock_number": {
+            "type": "integer"
+          },
+          "is_relative": {
+            "type": "boolean",
+            "description": "If true, stock_number is applied as delta (+/-). Default false."
+          }
+        },
+        "required": [
+          "is_stock_manager",
+          "stock_number"
+        ]
+      },
+      "sources": [
+        "turn1file2",
+        "turn1file4"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/accounting/bulk-update-price",
+      "auth_required": true,
+      "headers": {
+        "X-API-KEY": "your-token"
+      },
+      "description": "Bulk update prices by variant id.",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "price": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "id",
+                "price"
+              ]
+            }
+          }
+        },
+        "required": [
+          "variants"
+        ]
+      },
+      "notes": [
+        "The PDF shows the path truncated as 'bulk-update-pric'; intended path is assumed to be 'bulk-update-price'."
+      ],
+      "sources": [
+        "turn1file4",
+        "turn1file0"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/accounting/bulk-update-stock",
+      "auth_required": true,
+      "headers": {
+        "X-API-KEY": "your-token"
+      },
+      "description": "Bulk update stock by variant id.",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "stock": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id",
+                "stock"
+              ]
+            }
+          }
+        },
+        "required": [
+          "variants"
+        ]
+      },
+      "sources": [
+        "turn1file4",
+        "turn1file0"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/products/update_variant/sku/{SKU}",
+      "auth_required": true,
+      "headers": {
+        "X-API-KEY": "your-token"
+      },
+      "description": "Update a variant by SKU (price/stock/raw_price).",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "is_stock_managed": {
+            "type": "boolean"
+          },
+          "stock_number": {
+            "type": "integer"
+          },
+          "price": {
+            "type": "number"
+          },
+          "has_raw_price": {
+            "type": "boolean"
+          },
+          "raw_price": {
+            "type": "number"
+          }
+        },
+        "required": []
+      },
+      "sources": [
+        "turn1file4",
+        "turn1file0"
+      ]
+    },
+    {
+      "method": "WEBHOOK",
+      "path": "/your/webhook/url",
+      "auth_required": false,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "description": "Order-created webhook: the store posts order data to your URL upon order creation (configure via support).",
+      "request_schema": {
+        "type": "object",
+        "description": "Large order payload with invoice, user, items, shipping, receipts, etc.",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "invoice": {
+            "type": "object"
+          },
+          "user": {
+            "type": "object"
+          },
+          "receipts": {
+            "type": "array"
+          }
+        }
+      },
+      "sources": [
+        "turn1file6",
+        "turn1file19",
+        "turn1file5",
+        "turn1file18"
+      ]
+    }
+  ]
+}

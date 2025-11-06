@@ -1,0 +1,266 @@
+{
+  "meta": {
+    "source": "Anar360 Developers API (HTML)",
+    "target": "Third Party Integration v1.02",
+    "notes": [
+      "Source lists products with variants and expects orders created by Anar360 variant _id.",
+      "Target expects local products/variants created first and orders created by SKU.",
+      "Maintain a lookup table: anar.variant._id <-> local.variant.sku to bridge ordering."
+    ]
+  },
+  "mappings": [
+    {
+      "source_endpoint": {
+        "method": "GET",
+        "path": "/api/360/auth/validate"
+      },
+      "target_action": {
+        "type": "none",
+        "reason": "Used to validate token only"
+      },
+      "field_map": {},
+      "implementation": "Call before any sync to ensure Bearer token is valid."
+    },
+    {
+      "source_endpoint": {
+        "method": "GET",
+        "path": "/api/360/products"
+      },
+      "target_endpoint": {
+        "method": "POST",
+        "path": "/api/v1/products"
+      },
+      "alternate_target": {
+        "method": "PUT",
+        "path": "/api/v1/products/{product_id}"
+      },
+      "behavior": "Upsert products + variants from Anar into local catalog.",
+      "pagination": {
+        "query": [
+          "page",
+          "limit",
+          "since"
+        ]
+      },
+      "field_map": {
+        "product": {
+          "title": "product.name",
+          "id": "product.external_id (custom)",
+          "description": "attributes[].name=description -> attributes[].value",
+          "type": "product.product_type (\"simple\"/mapped)",
+          "brands[].name": "tags[] (optional)",
+          "categories[].name": "product_category_ids (map categories first)"
+        },
+        "variant": {
+          "variants[n]._id": "product_variants[n].id (on update) || used to mint SKU",
+          "variants[n].price": "product_variants[n].price",
+          "variants[n].stock": "product_variants[n].stock_number",
+          "variants[n].attributes": "product_variants[n].attributes[].{name,value} (flatten)",
+          "variants[n].weight": "product_variants[n].weight (if present)"
+        },
+        "media": {
+          "mainImage": "image_ids/main (if supported)",
+          "images[].src": "image_ids[] (if supported)"
+        }
+      },
+      "transform_rules": [
+        "If local SKU missing, generate deterministic SKU from Anar product id + variant _id.",
+        "Set is_stock_managed=true when variants[n].stock is not null; else false.",
+        "Copy HTML description into an attribute named 'description' if no HTML field exists."
+      ]
+    },
+    {
+      "source_endpoint": {
+        "method": "GET",
+        "path": "/api/360/categories"
+      },
+      "target_action": {
+        "type": "preprocessing"
+      },
+      "field_map": {
+        "items[].name": "local_category.name",
+        "items[]._id": "local_category.external_id",
+        "items[].route": "local_category.path"
+      },
+      "implementation": "Build a category map to fill target product.product_category_ids."
+    },
+    {
+      "source_endpoint": {
+        "method": "GET",
+        "path": "/api/360/attributes"
+      },
+      "target_action": {
+        "type": "preprocessing"
+      },
+      "field_map": {
+        "items[].key": "attributes[].name",
+        "items[].values[]": "attribute option values"
+      },
+      "implementation": "Create/ensure local attributes exist before posting products."
+    },
+    {
+      "source_endpoint": {
+        "method": "POST",
+        "path": "/api/360/orders"
+      },
+      "target_endpoint": {
+        "method": "POST",
+        "path": "/api/v1/orders/create_order"
+      },
+      "behavior": "Create order in Anar vs. create order in local. Direction depends on workflow.",
+      "field_map": {
+        "items": [
+          {
+            "source": "items[].variation (Anar variant _id)",
+            "target": "items[].sku (local SKU via lookup)"
+          },
+          {
+            "source": "items[].amount",
+            "target": "items[].count"
+          },
+          {
+            "source": "—",
+            "target": "items[].price (recalculate from latest local price or Anar sync)"
+          }
+        ],
+        "address": {
+          "postalCode": "shipping_address.postal_code",
+          "detail": "shipping_address.address",
+          "transFeree": "shipping_address.first_name + ' ' + shipping_address.last_name (split if needed)",
+          "transFereeMobile": "shipping_address.phone_number",
+          "city": "shipping_address.city",
+          "province/state": "shipping_address.region"
+        },
+        "shipments": {
+          "shipmentId": "shipping_items[].derived via Anar shipments (name optional)",
+          "deliveryId": "shipping_items[].derived",
+          "shipmentsReferenceId": "shipping_items[].derived",
+          "description": "note"
+        },
+        "payment": {
+          "—": "payment.ref_number"
+        }
+      },
+      "transform_rules": [
+        "Before placing order to target, ensure priced & in-stock: if not, sync price/stock via target accounting endpoints.",
+        "Construct shipping_items[] in target from Anar shipments[] by grouping items per supplier/shipment."
+      ]
+    },
+    {
+      "source_endpoint": {
+        "method": "GET",
+        "path": "/api/360/orders"
+      },
+      "target_endpoint": {
+        "method": "GET",
+        "path": "/api/v1/orders"
+      },
+      "field_map": {},
+      "notes": "Use to reconcile orders between systems."
+    },
+    {
+      "source_endpoint": {
+        "method": "GET",
+        "path": "/api/360/orders:_id"
+      },
+      "target_endpoint": {
+        "method": "PUT",
+        "path": "/api/v1/orders/{order_id}"
+      },
+      "field_map": {
+        "status (Anar)": "shippingItems[].status (target)",
+        "_id (Anar order)": "order_id (path param)"
+      },
+      "implementation": "Push meaningful status changes into local order via target PUT."
+    },
+    {
+      "source_endpoint": {
+        "method": "—",
+        "path": "Webhook (order created)"
+      },
+      "target_endpoint": {
+        "method": "POST",
+        "path": "/api/v1/orders/create_order"
+      },
+      "behavior": "If using webhook-first flow, map incoming Anar order payload to target order creation.",
+      "field_map": {
+        "invoice.cart.items": "items[] (map by variant _id -> SKU)",
+        "shipping": "shipping_address + shipping_items",
+        "payments": "payment"
+      }
+    },
+    {
+      "source_endpoint": {
+        "method": "—",
+        "path": "Price/Stock from Anar products.variants"
+      },
+      "target_endpoints": [
+        {
+          "method": "PUT",
+          "path": "/api/v1/accounting/update-price/{variant_id}"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/accounting/update-stock/{variant_id}"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/accounting/bulk-update-price"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/accounting/bulk-update-stock"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/products/update_variant/sku/{SKU}"
+        }
+      ],
+      "field_map": {
+        "variants[n].price": "price / discount_price",
+        "variants[n].stock": "stock_number / is_stock_manager (false if unlimited)"
+      },
+      "transform_rules": [
+        "Prefer bulk endpoints for efficiency.",
+        "If only SKU available, use /products/update_variant/sku/{SKU}.",
+        "If only local variant id is available, use update-price/update-stock by id."
+      ]
+    }
+  ],
+  "lookup_tables": {
+    "variant_bridge": {
+      "keys": [
+        "anar_variant_id",
+        "local_variant_id",
+        "local_sku"
+      ],
+      "upsert_on_product_sync": true,
+      "usage": "Translate Anar 'variation' to Target 'sku' during order creation."
+    },
+    "shipping_bridge": {
+      "keys": [
+        "shipmentsReferenceId",
+        "shipmentId",
+        "deliveryId",
+        "local_shipping_name"
+      ],
+      "usage": "Map Anar shipments structure to Target shipping_items[].name and cost."
+    },
+    "category_map": {
+      "keys": [
+        "anar_category_id",
+        "anar_category_name",
+        "local_category_id"
+      ],
+      "usage": "Feed target product_category_ids"
+    },
+    "attribute_map": {
+      "keys": [
+        "anar_attribute_key",
+        "values[]",
+        "local_attribute_id/options[]"
+      ],
+      "usage": "Feed target product_variants[].attributes"
+    }
+  }
+}

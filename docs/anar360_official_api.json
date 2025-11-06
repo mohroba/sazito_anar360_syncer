@@ -1,0 +1,256 @@
+{
+  "meta": {
+    "source": "https://developers.anar360.co/",
+    "auth": {
+      "scheme": "Bearer <YOUR_TOKEN>",
+      "header": "Authorization: Bearer <YOUR_TOKEN>"
+    },
+    "base_url": "https://api.anar360.com"
+  },
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/360/auth/validate",
+      "title": "Validate token / subscription",
+      "auth_required": true,
+      "query": {},
+      "request_body": null,
+      "response_fields": {
+        "success": "boolean",
+        "shopUrl": "string (e.g., https://<slug>.myanar360.com)",
+        "subscriptionPlan": "string (e.g., pro)",
+        "subscriptionRemaining": "number (remaining quota/time)"
+      },
+      "errors": {
+        "403": {
+          "statusCode": 403,
+          "success": false,
+          "error": "10010 | 10011 | 10012"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/360/products",
+      "title": "List products (your added products)",
+      "auth_required": true,
+      "query": {
+        "page": "integer (optional)",
+        "limit": "integer (optional; recommended <= 25)",
+        "since": "integer (optional, NEGATIVE milliseconds offset; e.g., -120000 for 2 minutes)"
+      },
+      "request_body": null,
+      "response_fields": {
+        "total": "integer",
+        "skip": "integer",
+        "limit": "integer",
+        "items": [
+          {
+            "id": "string (product id)",
+            "title": "string",
+            "description": "string (HTML allowed)",
+            "mainImage": "string (URL)",
+            "images": [
+              {
+                "src": "string (URL)",
+                "thumbnail": "string",
+                "_type": "string",
+                "main": "boolean",
+                "_id": "string"
+              }
+            ],
+            "isReseller": "boolean",
+            "attributes": "array",
+            "brands": "array",
+            "categories": [
+              {
+                "_id": "string",
+                "name": "string",
+                "attributeIds": "array",
+                "type": "string",
+                "order": "number",
+                "level": "string",
+                "parent": "string",
+                "route": "array<string>",
+                "createdAt": "string (ISO)",
+                "updatedAt": "string (ISO)",
+                "__v": "number"
+              }
+            ],
+            "createdAt": "string (ISO)",
+            "updatedAt": "string (ISO)",
+            "status": "string",
+            "type": "string",
+            "resellStatus": "string",
+            "shipmentsReferenceId": "string",
+            "shipmentsReferenceState": "string",
+            "shipmentsReferenceCity": "string",
+            "shipments": [
+              {
+                "type": "string",
+                "delivery": [
+                  {
+                    "deliveryType": "string (bike|post|express|tipax|chapar|...)",
+                    "price": "number",
+                    "estimatedTime": "string",
+                    "freeCondition": {
+                      "purchasesPrice": "number"
+                    },
+                    "active": "boolean",
+                    "_id": "string"
+                  }
+                ],
+                "active": "boolean",
+                "_id": "string"
+              }
+            ],
+            "variants": [
+              {
+                "_id": "string (variation id - use for ordering)",
+                "attributes": "array<object> (key/value pairs)",
+                "price": "number",
+                "stock": "integer or null",
+                "weight": "number or null"
+              }
+            ]
+          }
+        ]
+      },
+      "notes": [
+        "Ordering is done by variant (variation) _id, not by product id.",
+        "Use 'shipments*' fields for building shipments in the order payload.",
+        "Images are served from s3.c22.wtf; fallback/transform may be needed."
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/360/products/{id}",
+      "title": "Get single product by id",
+      "auth_required": true,
+      "query": {},
+      "request_body": null,
+      "response_fields_ref": "Same as items[] element in GET /api/360/products"
+    },
+    {
+      "method": "GET",
+      "path": "/api/360/categories",
+      "title": "List categories (for mapping)",
+      "auth_required": true,
+      "query": {
+        "page": "integer (optional)",
+        "limit": "integer (optional)"
+      },
+      "request_body": null,
+      "response_fields": {
+        "total": "integer",
+        "skip": "integer",
+        "limit": "integer",
+        "items": [
+          {
+            "_id": "string",
+            "name": "string",
+            "attributeIds": "array<string>",
+            "type": "string",
+            "order": "number",
+            "level": "string",
+            "parent": "string",
+            "route": "array<string>",
+            "createdAt": "string (ISO)",
+            "updatedAt": "string (ISO)",
+            "__v": "number"
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/360/attributes",
+      "title": "List attributes (for mapping)",
+      "auth_required": true,
+      "query": {
+        "page": "integer (optional)",
+        "limit": "integer (optional)"
+      },
+      "request_body": null,
+      "response_fields": {
+        "total": "integer",
+        "skip": "integer",
+        "limit": "integer",
+        "items": [
+          {
+            "key": "string",
+            "name": "string",
+            "values": "array<string>",
+            "count": "number"
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/360/orders",
+      "title": "Create order",
+      "auth_required": true,
+      "query": {},
+      "request_body": {
+        "type": "string (must be 'retail')",
+        "items": [
+          {
+            "variation": "string (variant _id from product.variants[])",
+            "amount": "integer",
+            "info": "object (send empty {})"
+          }
+        ],
+        "address": {
+          "postalCode": "string",
+          "detail": "string",
+          "transFeree": "string (full name)",
+          "transFereeMobile": "string (phone)",
+          "city": "string",
+          "province": "string"
+        },
+        "shipments": [
+          {
+            "shipmentId": "string",
+            "deliveryId": "string",
+            "shipmentsReferenceId": "string",
+            "description": "string"
+          }
+        ]
+      },
+      "response_fields": {
+        "success": "boolean",
+        "orders": "array<object> (created shipments/orders)",
+        "paymentLink": "string (if applicable)",
+        "message": "string"
+      },
+      "notes": [
+        "Build 'shipments' array from product.shipments/shipmentsReference* fields.",
+        "Ensure prices/stock are fresh just before creating the order."
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/360/orders",
+      "title": "List orders (shipments)",
+      "auth_required": true,
+      "query": {},
+      "request_body": null,
+      "response_fields": {
+        "total": "integer",
+        "skip": "integer",
+        "limit": "integer",
+        "items": "array<object> (orders/shipments)"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/360/orders:{_id}",
+      "title": "Get single order by id",
+      "auth_required": true,
+      "query": {},
+      "request_body": null,
+      "response_fields": "object (order details by id)"
+    }
+  ]
+}
