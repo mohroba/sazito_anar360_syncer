@@ -9,6 +9,8 @@ return [
         'token' => env('ANAR360_TOKEN', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4MDI0N2Y1N2U0ZDIyZGJhNmRkMGNjNiIsImFjY291bnQiOiI2ODAyNDdmNTdlNGQyMmRiYTZkZDBjYzgiLCJyb2xlcyI6W10sImlhdCI6MTc0NTUyOTY2NX0.lJxeJBq7wWBB7qUW7t-ozrNPj7WaOcajxTKcJVJCZEI'),
         'page_limit' => (int) env('SYNC_PAGE_LIMIT', 25),
         'since_ms' => (int) env('SYNC_SINCE_MS', -120000),
+        'orders_page_limit' => (int) env('SYNC_ORDERS_PAGE_LIMIT', 25),
+        'pending_orders' => [],
     ],
     'sazito' => [
         'enabled' => env('INTEGRATIONS_SAZITO_ENABLED', true),

@@ -10,9 +10,12 @@ use App\Services\Sazito\Exceptions\SazitoRequestException;
 use Illuminate\Support\Facades\Artisan;
 use Mockery;
 use Tests\TestCase;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class TestUpdateSazitoProductCommandTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected function tearDown(): void
     {
         Mockery::close();
@@ -68,8 +71,8 @@ class TestUpdateSazitoProductCommandTest extends TestCase
 
         $this->assertSame(0, $exitCode);
         $output = Artisan::output();
-        $this->assertStringContainsString('Price update request sent for variant-1.', $output);
-        $this->assertStringContainsString('Stock update request sent for variant-1.', $output);
+        $this->assertStringContainsString('Price update request sent for variant variant-1.', $output);
+        $this->assertStringContainsString('Stock update request sent for variant variant-1.', $output);
     }
 
     public function test_command_handles_sazito_exceptions(): void

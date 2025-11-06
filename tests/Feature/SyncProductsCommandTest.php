@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Actions\Sync\BuildAnar360TaxonomyAction;
 use App\Actions\Sync\FetchProductsAction;
+use App\Actions\Sync\SyncOrdersAction;
 use App\Console\Commands\SyncProductsCommand;
 use App\Jobs\UpdateVariantPriceJob;
 use App\Jobs\UpdateVariantStockJob;
@@ -32,6 +34,8 @@ class SyncProductsCommandTest extends TestCase
     public function test_dispatches_jobs_with_sazito_mapping(): void
     {
         Bus::fake();
+
+        $this->mockTaxonomyAndOrders();
 
         $product = SazitoProduct::query()->create([
             'sazito_id' => 'sazito-product-1',
@@ -81,6 +85,8 @@ class SyncProductsCommandTest extends TestCase
     {
         Bus::fake();
 
+        $this->mockTaxonomyAndOrders();
+
         $fetchAction = Mockery::mock(FetchProductsAction::class);
         $fetchAction->shouldReceive('execute')
             ->once()
@@ -113,6 +119,8 @@ class SyncProductsCommandTest extends TestCase
     public function test_links_sazito_product_by_title_when_mapping_missing(): void
     {
         Bus::fake();
+
+        $this->mockTaxonomyAndOrders();
 
         $title = 'کاندوم 12 عددي ارگاسميک کاپوت';
 
@@ -154,5 +162,28 @@ class SyncProductsCommandTest extends TestCase
         };
 
         return $reader->call($object);
+    }
+
+    private function mockTaxonomyAndOrders(): void
+    {
+        $taxonomyAction = Mockery::mock(BuildAnar360TaxonomyAction::class);
+        $taxonomyAction->shouldReceive('execute')
+            ->andReturn([
+                'categories' => [],
+                'attributes' => [],
+                'meta' => [
+                    'categories' => [],
+                    'attributes' => [],
+                ],
+            ]);
+        $this->app->instance(BuildAnar360TaxonomyAction::class, $taxonomyAction);
+
+        $ordersAction = Mockery::mock(SyncOrdersAction::class);
+        $ordersAction->shouldReceive('execute')
+            ->andReturn([
+                'fetched' => ['items' => [], 'meta' => []],
+                'submitted' => [],
+            ]);
+        $this->app->instance(SyncOrdersAction::class, $ordersAction);
     }
 }
