@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Console\Commands\TestProductsCommand;
 use App\Services\Anar360\Anar360Client;
 use App\Services\Sazito\SazitoClient;
 use Domain\DTO\ProductDTO;
@@ -39,11 +40,13 @@ class TestProductsCommandTest extends TestCase
         $sazitoMock = Mockery::mock(SazitoClient::class);
         $sazitoMock->shouldReceive('fetchProducts')
             ->once()
-            ->withNoArgs()
+            ->with(1, config('integrations.sazito.page_size'))
             ->andReturn(['data' => [['id' => 'product-1']]]);
         $this->app->instance(SazitoClient::class, $sazitoMock);
 
-        $exitCode = Artisan::call('integration:test-products');
+        $this->app->bind(TestProductsCommand::class, fn () => new TestProductsCommand($anarMock, $sazitoMock));
+
+        $exitCode = Artisan::call(TestProductsCommand::class);
 
         $this->assertSame(0, $exitCode);
         $output = Artisan::output();

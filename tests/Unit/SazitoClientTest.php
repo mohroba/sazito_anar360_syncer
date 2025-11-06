@@ -46,7 +46,7 @@ class SazitoClientTest extends TestCase
         ]);
 
         $this->expectException(SazitoRequestException::class);
-        $this->expectExceptionMessage('Sazito responded with status 422 for /accounting/update-price/variant-1');
+        $this->expectExceptionMessage('Sazito responded with status 422 for accounting/update-price/variant-1');
 
         $service->putPrice('variant-1', 1000);
     }
