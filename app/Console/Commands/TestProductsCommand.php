@@ -67,7 +67,7 @@ class TestProductsCommand extends Command
         try {
             $sazitoResponse = $sazitoProductId
                 ? $this->sazitoClient->fetchProduct((string) $sazitoProductId)
-                : $this->sazitoClient->fetchProducts();
+                : $this->sazitoClient->fetchProducts($page, $limit);
         } catch (SazitoRequestException $exception) {
             $this->error(sprintf('Failed to fetch Sazito products: %s', $exception->getMessage()));
 
