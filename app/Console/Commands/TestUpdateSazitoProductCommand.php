@@ -51,13 +51,19 @@ class TestUpdateSazitoProductCommand extends Command
          * -----------------------------------------------------------------*/
         $runId = (string) Str::ulid();
 
-        SyncRun::query()->create([
-            'id'         => $runId,
-            'started_at' => now(),
-            'status'     => 'running',
-            'scope'      => 'manual-test',
-            'page'       => 0,
-        ]);
+        $runPersisted = false;
+        try {
+            SyncRun::query()->create([
+                'id'         => $runId,
+                'started_at' => now(),
+                'status'     => 'running',
+                'scope'      => 'manual-test',
+                'page'       => 0,
+            ]);
+            $runPersisted = true;
+        } catch (Throwable $exception) {
+            $this->warn(sprintf('⚠️  Unable to record synthetic run: %s', $exception->getMessage()));
+        }
 
         /** ----------------------------------------------------------------
          *  2️⃣  Perform price update (if requested)
@@ -76,15 +82,15 @@ class TestUpdateSazitoProductCommand extends Command
                     hasRawPrice:   $hasRawPrice,
                 );
 
-                $this->info(sprintf('✅  Price update request sent for variant %s.', $variantId));
+                $this->info(sprintf('✅  Price update request sent for %s.', $variantId));
             } catch (SazitoRequestException $e) {
                 $this->error(sprintf('❌  Sazito rejected the price update: %s', $e->getMessage()));
-                $this->finalizeRun($runId, 'failed');
+                $this->finalizeRun($runId, 'failed', $runPersisted);
 
                 return self::FAILURE;
             } catch (Throwable $e) {
                 $this->error(sprintf('❌  Unexpected price update failure: %s', $e->getMessage()));
-                $this->finalizeRun($runId, 'failed');
+                $this->finalizeRun($runId, 'failed', $runPersisted);
 
                 return self::FAILURE;
             }
@@ -104,15 +110,15 @@ class TestUpdateSazitoProductCommand extends Command
                     isRelative:   $isRelative,
                 );
 
-                $this->info(sprintf('✅  Stock update request sent for variant %s.', $variantId));
+                $this->info(sprintf('✅  Stock update request sent for %s.', $variantId));
             } catch (SazitoRequestException $e) {
                 $this->error(sprintf('❌  Sazito rejected the stock update: %s', $e->getMessage()));
-                $this->finalizeRun($runId, 'failed');
+                $this->finalizeRun($runId, 'failed', $runPersisted);
 
                 return self::FAILURE;
             } catch (Throwable $e) {
                 $this->error(sprintf('❌  Unexpected stock update failure: %s', $e->getMessage()));
-                $this->finalizeRun($runId, 'failed');
+                $this->finalizeRun($runId, 'failed', $runPersisted);
 
                 return self::FAILURE;
             }
@@ -121,7 +127,7 @@ class TestUpdateSazitoProductCommand extends Command
         /** ----------------------------------------------------------------
          *  4️⃣  Mark the synthetic run as finished-success
          * -----------------------------------------------------------------*/
-        $this->finalizeRun($runId, 'success');
+        $this->finalizeRun($runId, 'success', $runPersisted);
 
         return self::SUCCESS;
     }
@@ -149,11 +155,19 @@ class TestUpdateSazitoProductCommand extends Command
     /**
      * Update the temporary SyncRun row’s final status.
      */
-    private function finalizeRun(string $runId, string $status): void
+    private function finalizeRun(string $runId, string $status, bool $persisted): void
     {
-        SyncRun::query()->whereKey($runId)->update([
-            'finished_at' => now(),
-            'status'      => $status,
-        ]);
+        if (! $persisted) {
+            return;
+        }
+
+        try {
+            SyncRun::query()->whereKey($runId)->update([
+                'finished_at' => now(),
+                'status'      => $status,
+            ]);
+        } catch (Throwable $exception) {
+            $this->warn(sprintf('⚠️  Unable to finalize synthetic run: %s', $exception->getMessage()));
+        }
     }
 }

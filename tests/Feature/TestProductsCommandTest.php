@@ -39,7 +39,7 @@ class TestProductsCommandTest extends TestCase
         $sazitoMock = Mockery::mock(SazitoClient::class);
         $sazitoMock->shouldReceive('fetchProducts')
             ->once()
-            ->withNoArgs()
+            ->with(1, 5)
             ->andReturn(['data' => [['id' => 'product-1']]]);
         $this->app->instance(SazitoClient::class, $sazitoMock);
 
