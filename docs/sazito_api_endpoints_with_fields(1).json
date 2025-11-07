@@ -28,6 +28,19 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/products/{product_id}",
+      "auth_required": false,
+      "headers": {},
+      "description": "Retrieve a single product by id.",
+      "request_schema": null,
+      "sources": [
+        "turn1file12",
+        "turn1file13",
+        "turn1file14"
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/orders",
       "auth_required": true,
       "headers": {

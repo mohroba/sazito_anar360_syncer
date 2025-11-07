@@ -161,7 +161,7 @@
     {
       "source_endpoint": {
         "method": "GET",
-        "path": "/api/360/orders:_id"
+        "path": "/api/360/orders/{id}"
       },
       "target_endpoint": {
         "method": "PUT",
