@@ -27,6 +27,38 @@ Route::get('/run/sazito-sync', function (\Illuminate\Http\Request $request) {
     ]);
 });
 
+Route::get('/run/full-sync', function (\Illuminate\Http\Request $request) {
+    $options = [
+        '--since-ms' => $request->query('since_ms'),
+        '--page' => $request->query('page'),
+        '--limit' => $request->query('limit'),
+        '--scope' => $request->query('scope'),
+        '--catalogue-page' => $request->query('catalogue_page'),
+        '--catalogue-limit' => $request->query('catalogue_limit'),
+        '--catalogue-all' => $request->boolean('catalogue_all', true) ? 'true' : 'false',
+    ];
+
+    $options = array_filter($options, static function ($value) {
+        if ($value === null) {
+            return false;
+        }
+
+        if (is_string($value)) {
+            return trim($value) !== '';
+        }
+
+        return true;
+    });
+
+    Artisan::call('sync:test-run', $options);
+
+    return response()->json([
+        'status' => 'ok',
+        'message' => 'Full sync command executed successfully.',
+        'output' => trim(Artisan::output()),
+    ]);
+});
+
 Route::get('/run/migrate', function (\Illuminate\Http\Request $request) {
     // 🚀 Run migrations
     Artisan::call('migrate', ['--force' => true]);

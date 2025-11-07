@@ -60,9 +60,10 @@ class SyncSazitoProductsCommand extends Command
         ]);
 
         $totals = [
-            'products'  => 0,
-            'variants'  => 0,
-            'mappings'  => 0,
+            'products' => 0,
+            'variants' => 0,
+            'mappings' => 0,
+            'product_mappings' => 0,
         ];
 
         // ───────────────────────────
@@ -100,12 +101,14 @@ class SyncSazitoProductsCommand extends Command
                 $upserted            = $this->upsertCatalogue->execute($result['products']);
                 $totals['variants'] += $upserted['variants_upserted'];
                 $totals['mappings'] += $upserted['mappings_attached'];
+                $totals['product_mappings'] += $upserted['product_mappings_attached'];
 
                 $this->recordEvent->execute($run->id, 'SAZITO_CATALOGUE_UPSERTED', [
                     'page'     => $page,
                     'products' => $upserted['products_upserted'],
                     'variants' => $upserted['variants_upserted'],
                     'mappings' => $upserted['mappings_attached'],
+                    'product_mappings' => $upserted['product_mappings_attached'],
                 ]);
 
                 // ───── 4. Decide whether there’s a next page ─────
@@ -159,10 +162,11 @@ class SyncSazitoProductsCommand extends Command
 
         // Final summary
         $this->info(sprintf(
-            'Sazito sync completed. Products: %d, new variants: %d, mappings: %d',
+            'Sazito sync completed. Products: %d, new variants: %d, variant mappings: %d, product mappings: %d',
             $totals['products'],
             $totals['variants'],
             $totals['mappings'],
+            $totals['product_mappings'],
         ));
 
         return self::SUCCESS;
