@@ -84,6 +84,32 @@ class Anar360Client
         ];
     }
 
+    public function validateCredentials(?string $runId = null): array
+    {
+        $client = $this->makeClient();
+
+        $this->logRequest('GET', 'auth/validate', []);
+
+        $response = $client->request('GET', 'auth/validate', [
+            'run_id' => $runId,
+        ]);
+
+        $this->logResponse($response);
+
+        $payload = $this->decode($response);
+        $this->validateAuthPayload($payload);
+
+        return [
+            'success' => (bool) $payload['success'],
+            'shop_url' => isset($payload['shopUrl']) ? (string) $payload['shopUrl'] : null,
+            'subscription_plan' => isset($payload['subscriptionPlan']) ? (string) $payload['subscriptionPlan'] : null,
+            'subscription_remaining' => isset($payload['subscriptionRemaining'])
+                ? (float) $payload['subscriptionRemaining']
+                : null,
+            'meta' => Arr::except($payload, ['success', 'shopUrl', 'subscriptionPlan', 'subscriptionRemaining']),
+        ];
+    }
+
     public function fetchProduct(string $productId, ?string $runId = null): ProductDTO
     {
         $client = $this->makeClient();
@@ -110,6 +136,28 @@ class Anar360Client
             $payload['category_ids'],
             $payload['metadata'],
         );
+    }
+
+    public function fetchOrder(string $orderId, ?string $runId = null): OrderDTO
+    {
+        if ($orderId === '') {
+            throw new InvalidArgumentException('Order id must not be empty.');
+        }
+
+        $client = $this->makeClient();
+
+        $this->logRequest('GET', sprintf('orders/%s', $orderId), []);
+
+        $response = $client->request('GET', sprintf('orders/%s', $orderId), [
+            'run_id' => $runId,
+        ]);
+
+        $this->logResponse($response);
+
+        $payload = $this->normalizeOrder($this->decode($response));
+        $this->validateOrder($payload);
+
+        return $this->mapToOrderDto($payload);
     }
 
     /**
@@ -547,6 +595,23 @@ class Anar360Client
         }
     }
 
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function validateAuthPayload(array $payload): void
+    {
+        $validator = $this->validator->make($payload, [
+            'success' => 'required|boolean',
+            'shopUrl' => 'nullable|string',
+            'subscriptionPlan' => 'nullable|string',
+            'subscriptionRemaining' => 'nullable|numeric',
+        ]);
+
+        if ($validator->fails()) {
+            throw new InvalidArgumentException('Invalid Anar360 auth payload: '.$validator->errors()->first());
+        }
+    }
+
     private function validateOrderList(array $payload): void
     {
         $validator = $this->validator->make($payload, [
@@ -556,6 +621,24 @@ class Anar360Client
             'items.*.items.*.variation' => 'required|string',
             'items.*.items.*.amount' => 'required|integer',
             'items.*.shipments' => 'array',
+        ]);
+
+        if ($validator->fails()) {
+            throw new InvalidArgumentException('Invalid Anar360 order payload: '.$validator->errors()->first());
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function validateOrder(array $payload): void
+    {
+        $validator = $this->validator->make($payload, [
+            '_id' => 'required|string',
+            'items' => 'array',
+            'items.*.variation' => 'required|string',
+            'items.*.amount' => 'required|integer',
+            'shipments' => 'array',
         ]);
 
         if ($validator->fails()) {

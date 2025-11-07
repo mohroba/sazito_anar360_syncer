@@ -245,7 +245,7 @@
     },
     {
       "method": "GET",
-      "path": "/api/360/orders:{_id}",
+      "path": "/api/360/orders/{id}",
       "title": "Get single order by id",
       "auth_required": true,
       "query": {},

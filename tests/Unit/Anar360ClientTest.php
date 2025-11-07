@@ -368,4 +368,117 @@ class Anar360ClientTest extends TestCase
         $this->assertSame(1, $body['items'][0]['amount']);
         $this->assertSame('ship-1', $body['shipments'][0]['shipmentId']);
     }
+
+    public function test_validate_credentials_returns_normalized_payload(): void
+    {
+        $payload = [
+            'success' => true,
+            'shopUrl' => 'https://example.test',
+            'subscriptionPlan' => 'pro',
+            'subscriptionRemaining' => 42,
+            'note' => 'ok',
+        ];
+
+        $mockHandler = new MockHandler([
+            new Response(200, ['Content-Type' => 'application/json'], json_encode($payload, JSON_THROW_ON_ERROR)),
+        ]);
+
+        $history = [];
+        $handlerStack = HandlerStack::create($mockHandler);
+        $handlerStack->push(Middleware::history($history));
+
+        $client = new Client([
+            'handler' => $handlerStack,
+            'http_errors' => false,
+        ]);
+
+        $factory = Mockery::mock(HttpClientFactory::class);
+        $factory->shouldReceive('make')
+            ->once()
+            ->with('https://anar360.test', 'ANAR360', Mockery::type('array'))
+            ->andReturn($client);
+
+        $validator = $this->app->make(ValidatorFactory::class);
+
+        $service = new Anar360Client($factory, $validator, [
+            'base_uri' => 'https://anar360.test',
+            'token' => 'token',
+        ]);
+
+        $result = $service->validateCredentials('run-1');
+
+        $this->assertTrue($result['success']);
+        $this->assertSame('https://example.test', $result['shop_url']);
+        $this->assertSame('pro', $result['subscription_plan']);
+        $this->assertSame(42.0, $result['subscription_remaining']);
+        $this->assertSame(['note' => 'ok'], $result['meta']);
+
+        $this->assertCount(1, $history);
+        $request = $history[0]['request'];
+        $this->assertSame('auth/validate', $request->getUri()->getPath());
+    }
+
+    public function test_fetch_order_returns_single_order_dto(): void
+    {
+        $payload = [
+            'id' => 'order-1',
+            'type' => 'retail',
+            'status' => 'pending',
+            'items' => [
+                [
+                    'variation' => 'variant-1',
+                    'amount' => 3,
+                    'info' => ['color' => 'black'],
+                ],
+            ],
+            'shipments' => [
+                [
+                    'shipmentId' => 'ship-1',
+                    'deliveryId' => 'delivery-1',
+                ],
+            ],
+        ];
+
+        $mockHandler = new MockHandler([
+            new Response(200, ['Content-Type' => 'application/json'], json_encode($payload, JSON_THROW_ON_ERROR)),
+        ]);
+
+        $history = [];
+        $handlerStack = HandlerStack::create($mockHandler);
+        $handlerStack->push(Middleware::history($history));
+
+        $client = new Client([
+            'handler' => $handlerStack,
+            'http_errors' => false,
+        ]);
+
+        $factory = Mockery::mock(HttpClientFactory::class);
+        $factory->shouldReceive('make')
+            ->once()
+            ->with('https://anar360.test', 'ANAR360', Mockery::type('array'))
+            ->andReturn($client);
+
+        $validator = $this->app->make(ValidatorFactory::class);
+
+        $service = new Anar360Client($factory, $validator, [
+            'base_uri' => 'https://anar360.test',
+            'token' => 'token',
+        ]);
+
+        $order = $service->fetchOrder('order-1');
+
+        $this->assertInstanceOf(OrderDTO::class, $order);
+        $this->assertSame('order-1', $order->id);
+        $this->assertSame('retail', $order->type);
+        $this->assertSame('pending', $order->status);
+        $this->assertCount(1, $order->items);
+        $this->assertSame('variant-1', $order->items[0]->variationId);
+        $this->assertSame(3, $order->items[0]->amount);
+        $this->assertCount(1, $order->shipments);
+        $this->assertSame('ship-1', $order->shipments[0]->shipmentId);
+
+        $this->assertCount(1, $history);
+        $request = $history[0]['request'];
+        $this->assertSame('orders/order-1', $request->getUri()->getPath());
+    }
 }
