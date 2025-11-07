@@ -14,6 +14,10 @@ class UpsertSazitoCatalogueAction
     private const REFERENCE_KEYS = [
         'anar360_variant_id',
         'anar_variant_id',
+        'anar360_product_id',
+        'anar360_id',
+        'anar_product_id',
+        'anar_id',
         'anar360Id',
         'anarId',
         'external_id',
@@ -28,7 +32,7 @@ class UpsertSazitoCatalogueAction
 
     /**
      * @param list<array<string, mixed>> $products
-     * @return array{products_upserted:int, variants_upserted:int, mappings_attached:int}
+     * @return array{products_upserted:int, variants_upserted:int, mappings_attached:int, product_mappings_attached:int}
      */
     public function execute(array $products): array
     {
@@ -37,6 +41,7 @@ class UpsertSazitoCatalogueAction
         $productsUpserted = 0;
         $variantsUpserted = 0;
         $mappingsAttached = 0;
+        $productMappingsAttached = 0;
 
         foreach ($products as $product) {
             $sazitoId = (string) ($product['id'] ?? $product['sazito_id'] ?? $product['_id'] ?? $product['product_id'] ?? '');
@@ -45,16 +50,30 @@ class UpsertSazitoCatalogueAction
             }
 
             $title = $product['title'] ?? $product['name'] ?? null;
-            $model = SazitoProduct::query()->updateOrCreate(
-                ['sazito_id' => $sazitoId],
-                [
-                    'title' => $title,
-                    'title_normalized' => TitleNormalizer::normalize(is_string($title) ? $title : null),
-                    'slug' => $product['slug'] ?? null,
-                    'raw_payload' => $product['raw'] ?? $product,
-                    'synced_at' => $now,
-                ],
-            );
+            $productModel = SazitoProduct::query()->firstOrNew(['sazito_id' => $sazitoId]);
+            $originalProductAnarId = $productModel->anar360_product_id;
+
+            $payload = [
+                'title' => $title,
+                'title_normalized' => TitleNormalizer::normalize(is_string($title) ? $title : null),
+                'slug' => $product['slug'] ?? null,
+                'raw_payload' => $product['raw'] ?? $product,
+                'synced_at' => $now,
+            ];
+
+            $productReferences = $this->extractProductReferences($product);
+            $resolvedProductId = $this->resolvePreferredExternalId($productReferences);
+
+            if ($resolvedProductId !== null) {
+                $payload['anar360_product_id'] = $resolvedProductId;
+            }
+
+            $productModel->fill($payload);
+            $productModel->save();
+
+            if ($resolvedProductId !== null && $resolvedProductId !== $originalProductAnarId) {
+                $productMappingsAttached++;
+            }
 
             $productsUpserted++;
 
@@ -66,10 +85,10 @@ class UpsertSazitoCatalogueAction
                 }
 
                 $externalReferences = $this->extractExternalReferences($variant);
-                $resolvedAnarId = $this->resolveAnar360VariantId($externalReferences);
+                $resolvedAnarId = $this->resolvePreferredExternalId($externalReferences);
 
                 /** @var SazitoVariant $variantModel */
-                $variantModel = $model->variants()->updateOrCreate(
+                $variantModel = $productModel->variants()->updateOrCreate(
                     ['sazito_id' => $sazitoVariantId],
                     [
                         'title' => $variant['title'] ?? $variant['name'] ?? null,
@@ -95,7 +114,8 @@ class UpsertSazitoCatalogueAction
         return [
             'products_upserted' => $productsUpserted,
             'variants_upserted' => $variantsUpserted,
-            'mappings_attached' => $mappingsAttached,
+            'mappings_attached' => $mappingsAttached + $productMappingsAttached,
+            'product_mappings_attached' => $productMappingsAttached,
         ];
     }
 
@@ -103,7 +123,7 @@ class UpsertSazitoCatalogueAction
      * @param array<string, mixed> $variant
      * @return list<string>
      */
-    private function extractExternalReferences(array $variant): array
+    private function extractExternalReferences(array $variant, array $ignoredNestedKeys = []): array
     {
         $references = [];
 
@@ -116,7 +136,7 @@ class UpsertSazitoCatalogueAction
         foreach (['metadata', 'meta', 'attributes', 'extras'] as $nestedKey) {
             $references = [
                 ...$references,
-                ...$this->collectReferencesFromNested($variant[$nestedKey] ?? null),
+                ...$this->collectReferencesFromNested($variant[$nestedKey] ?? null, $ignoredNestedKeys),
             ];
         }
 
@@ -124,9 +144,32 @@ class UpsertSazitoCatalogueAction
     }
 
     /**
+     * @param array<string, mixed> $product
      * @return list<string>
      */
-    private function collectReferencesFromNested(mixed $value): array
+    private function extractProductReferences(array $product): array
+    {
+        $ignoredKeys = ['variants', 'variations', 'product_variants', 'productVariants', 'variant_list', 'variantList'];
+
+        $sanitized = $this->withoutKeys($product, [...$ignoredKeys, 'raw']);
+        $references = $this->extractExternalReferences($sanitized, $ignoredKeys);
+
+        $raw = $product['raw'] ?? null;
+        if (is_array($raw)) {
+            $rawSanitized = $this->withoutKeys($raw, $ignoredKeys);
+            $references = [
+                ...$references,
+                ...$this->extractExternalReferences($rawSanitized, $ignoredKeys),
+            ];
+        }
+
+        return array_values(array_unique($references));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function collectReferencesFromNested(mixed $value, array $ignoredKeys = []): array
     {
         if (! is_array($value)) {
             return [];
@@ -139,11 +182,15 @@ class UpsertSazitoCatalogueAction
             }
         }
 
-        foreach ($value as $item) {
+        foreach ($value as $key => $item) {
+            if (in_array((string) $key, $ignoredKeys, true)) {
+                continue;
+            }
+
             if (is_array($item)) {
                 $references = [
                     ...$references,
-                    ...$this->collectReferencesFromNested($item),
+                    ...$this->collectReferencesFromNested($item, $ignoredKeys),
                 ];
             }
         }
@@ -154,7 +201,7 @@ class UpsertSazitoCatalogueAction
     /**
      * @param list<string> $references
      */
-    private function resolveAnar360VariantId(array $references): ?string
+    private function resolvePreferredExternalId(array $references): ?string
     {
         foreach ($references as $reference) {
             if (preg_match('/^[a-f0-9]{24}$/i', $reference) === 1) {
@@ -163,5 +210,19 @@ class UpsertSazitoCatalogueAction
         }
 
         return $references[0] ?? null;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param list<string> $keys
+     * @return array<string, mixed>
+     */
+    private function withoutKeys(array $payload, array $keys): array
+    {
+        foreach ($keys as $key) {
+            unset($payload[$key]);
+        }
+
+        return $payload;
     }
 }
